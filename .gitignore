@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+package-lock.json
+*/node_modules/
+*/package-lock.json
+
+# Build outputs (KOMENTARZ: build/ są potrzebne do wdrożenia, ale można je ignorować w git)
+# static/*/build/  # Odkomentuj jeśli chcesz ignorować build w git
+# build/
+# dist/
+
+# Forge
+.forge/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Coverage
+coverage/
+*.lcov
+
+# Temporary files
+tmp/
+temp/
+

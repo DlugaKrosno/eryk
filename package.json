@@ -1,0 +1,46 @@
+{
+  "name": "jira-alert-management",
+  "version": "2.6.0",
+  "description": "Comprehensive alert management system for Jira Cloud with automated prioritization, team assignment, and Microsoft Teams integration",
+  "main": "src/index.js",
+  "author": "DrEryk",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/jira-alert-management"
+  },
+  "scripts": {
+    "build": "npm run build:user && npm run build:admin && npm run build:issue-panel",
+    "build:user": "cd static/user && npm install --legacy-peer-deps && set NODE_OPTIONS=--openssl-legacy-provider && npm run build",
+    "build:admin": "cd static/admin && npm install --legacy-peer-deps && set NODE_OPTIONS=--openssl-legacy-provider && npm run build",
+    "build:issue-panel": "cd static/issue-panel && npm install --legacy-peer-deps && set NODE_OPTIONS=--openssl-legacy-provider && npm run build",
+    "deploy": "forge deploy",
+    "deploy:prod": "forge deploy --environment production",
+    "lint": "echo 'Linting skipped - add ESLint if needed'",
+    "test": "echo 'Tests skipped - add test framework if needed'"
+  },
+  "dependencies": {
+    "@atlaskit/css-reset": "^7.3.9",
+    "@forge/api": "^3.0.0",
+    "@forge/resolver": "^1.5.0",
+    "@forge/storage": "^1.0.0"
+  },
+  "devDependencies": {
+    "@forge/cli": "^12.0.0"
+  },
+  "keywords": [
+    "forge",
+    "jira",
+    "alert",
+    "incident",
+    "management",
+    "escalation",
+    "teams",
+    "automation",
+    "priority",
+    "sla"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

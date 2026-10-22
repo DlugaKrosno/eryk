@@ -1,0 +1,167 @@
+modules:
+  # Smart Page - automatycznie wykrywa kontekst i pokazuje formularz lub admin
+  jira:projectPage:
+    - key: incident-reporter-project
+      resource: smart-page
+      resolver:
+        function: resolver
+      title: DrEryk Alert
+      
+  jira:globalPage:
+    - key: incident-reporter-global
+      resource: smart-page
+      resolver:
+        function: resolver
+      title: DrEryk Alert
+      
+  # Backend Functions
+  function:
+    # Resolver dla Custom UI
+    - key: resolver
+      handler: index.handler
+
+    # Create Incident
+    - key: createIncident
+      handler: index.handler
+
+    # Process Incident (rule engine + escalation)
+    - key: processIncident
+      handler: index.handler
+
+    # Get Config
+    - key: getConfig
+      handler: index.handler
+
+    # Save Config
+    - key: saveConfig
+      handler: index.handler
+
+    # Test Rule
+    - key: testRule
+      handler: index.handler
+
+    # Get My Incidents
+    - key: getMyIncidents
+      handler: index.handler
+
+    # Get Audit Log
+    - key: getAuditLog
+      handler: index.handler
+
+    # Trigger Handler
+    - key: processIncidentTrigger
+      handler: index.handler
+
+    # Get Projects
+    - key: getProjects
+      handler: index.handler
+
+    # Get Project Issue Types
+    - key: getProjectIssueTypes
+      handler: index.handler
+
+    # Get Issue Type Fields
+    - key: getIssueTypeFields
+      handler: index.handler
+
+    # Get Project Users
+    - key: getProjectUsers
+      handler: index.handler
+
+    # Get Current Team And Assignee
+    - key: getCurrentTeam
+      handler: index.handler
+
+    # Get Project Config
+    - key: getProjectConfig
+      handler: index.handler
+
+    # Save Project Config
+    - key: saveProjectConfig
+      handler: index.handler
+    
+    # Get Context
+    - key: getContext
+      handler: index.handler
+    
+    # Get Statistics
+    - key: getStatistics
+      handler: index.handler
+    
+    # Scheduled SLA Check (call via webtrigger or external scheduler)
+    - key: scheduledSLACheck
+      handler: index.scheduledSLACheck
+    
+    # Manual SLA Check
+    - key: runSLACheck
+      handler: index.handler
+    
+    # Reprocess All Issues
+    - key: reprocessAllIssues
+      handler: index.handler
+    
+    # Get Project Name
+    - key: getProjectName
+      handler: index.handler
+    
+    # Get Configured Projects
+    - key: getConfiguredProjects
+      handler: index.handler
+    
+    # Get Issues For Recalculation
+    - key: getIssuesForRecalc
+      handler: index.handler
+    
+    # Reprocess Selected Issues
+    - key: reprocessSelectedIssues
+      handler: index.handler
+    
+    # Test Teams Webhook
+    - key: testTeamsWebhook
+      handler: index.handler
+    
+    # Get Issues For SLA Check
+    - key: getIssuesForSLACheck
+      handler: index.handler
+    
+    # Send Batch SLA Reminder
+    - key: sendBatchSLAReminder
+      handler: index.handler
+  
+  # Webtrigger - Manual or external SLA check
+  webtrigger:
+    - key: sla-check-trigger
+      function: scheduledSLACheck
+
+  # Trigger - Auto-process on issue creation
+  trigger:
+    - key: incident-created-trigger
+      function: processIncidentTrigger
+      events:
+        - avi:jira:created:issue
+
+resources:
+  - key: user-page
+    path: static/user/build
+    
+  - key: admin-page
+    path: static/admin/build
+  
+  - key: smart-page
+    path: static/smart/build
+
+app:
+  runtime:
+    name: nodejs20.x
+  id: ari:cloud:ecosystem::app/14fb3225-4487-4c53-a8be-b887754173fa
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - read:jira-user
+    - storage:app
+  external:
+    fetch:
+      backend:
+        - "*.webhook.office.com"

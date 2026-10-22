@@ -1,0 +1,48 @@
+# Forge ignore file - pliki ignorowane podczas wdrożenia
+
+# Node modules
+node_modules/
+**/node_modules/
+
+# Build artifacts (nie ignoruj - są potrzebne!)
+# static/*/build/
+
+# Development files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test files (opcjonalnie - jeśli nie chcesz ich wdrożyć)
+**/__tests__/
+**/*.test.js
+**/*.spec.js
+
+# Documentation (opcjonalnie)
+# *.md
+# docs/
+
+# Git
+.git/
+.gitignore
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
