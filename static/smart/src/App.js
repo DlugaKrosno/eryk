@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { invoke, view } from '@forge/bridge';
 import './App.css';
 import Statistics from './Statistics';
-import Schedule from './Schedule';
+import DutyScheduleTab from './DutyScheduleTab';
+import SmartHints from './SmartHints';
+import SimilarToAlert from './SimilarToAlert';
 
 export default function UserApp() {
   const [loading, setLoading] = useState(false);
@@ -13,6 +15,7 @@ export default function UserApp() {
   const [formFields, setFormFields] = useState([]);
   const [formData, setFormData] = useState({});
   const [currentTeam, setCurrentTeam] = useState(null);
+  const [domains, setDomains] = useState([]);
   const [assignedPerson, setAssignedPerson] = useState(null);
   const [jiraInstanceUrl, setJiraInstanceUrl] = useState(null);
   const [showAllIncidents, setShowAllIncidents] = useState(true); // Domyślnie pokazuj wszystkie (nie tylko moje)
@@ -38,6 +41,7 @@ export default function UserApp() {
   const [configuredProjects, setConfiguredProjects] = useState([]); // Lista skonfigurowanych projektów
   const [currentProjectKey, setCurrentProjectKey] = useState(null); // Aktualny klucz projektu
   const [isProjectContext, setIsProjectContext] = useState(false); // Czy użytkownik jest w kontekście projektu (project page)
+  const [similarTarget, setSimilarTarget] = useState(null); // Alert, dla którego sprawdzamy podobne
   const [currentRoute, setCurrentRoute] = useState('/report'); // Aktualny route (dla submenu)
   const [currentUserAccountId, setCurrentUserAccountId] = useState(null); // Account ID aktualnego użytkownika
   
@@ -77,9 +81,29 @@ export default function UserApp() {
     }
   }, [activeTab]);
   
+  // Zespół i dyżurny zależą od wybranej domeny
+  useEffect(() => {
+    if (!currentProjectKey || !formData.domain) {
+      setCurrentTeam(null);
+      setAssignedPerson(null);
+      return;
+    }
+    // Odpowiedź dla poprzednio wybranej domeny nie może nadpisać aktualnej
+    let cancelled = false;
+    invoke('getCurrentTeam', { projectKey: currentProjectKey, domainId: formData.domain })
+      .then(result => {
+        if (!cancelled && result.success) {
+          setCurrentTeam(result.team);
+          setAssignedPerson(result.assignedPerson);
+        }
+      })
+      .catch(error => console.error('Błąd pobierania zespołu domeny:', error));
+    return () => { cancelled = true; };
+  }, [currentProjectKey, formData.domain]);
+  
   const loadStatisticsConfig = async () => {
     try {
-      let projectKey = null;
+      let projectKey = currentProjectKey || null;
       let issueTypeId = null;
       
       // Pobierz z kontekstu
@@ -104,6 +128,13 @@ export default function UserApp() {
         }
       }
       
+      if (!projectKey) {
+        const configured = await invoke('getConfiguredProjects', {});
+        if (configured.success && configured.projects && configured.projects.length > 0) {
+          projectKey = configured.projects[0].key;
+        }
+      }
+
       if (projectKey) {
         const projectConfigResult = await invoke('getProjectConfig', { projectKey });
         if (projectConfigResult.success && projectConfigResult.config && projectConfigResult.config.incidentIssueTypeId) {
@@ -118,6 +149,13 @@ export default function UserApp() {
     }
   };
   
+  // Zmiana projektu przyciskiem "Zmień projekt" odświeża też listę alertów
+  useEffect(() => {
+    if (currentProjectKey && activeTab === 'myIncidents') {
+      loadMyIncidents();
+    }
+  }, [currentProjectKey]);
+
   // Osobny useEffect dla showAllIncidents, showOnlyOpen i showAssignedToMe - przeładuj gdy się zmienią
   useEffect(() => {
     if (activeTab === 'myIncidents') {
@@ -159,6 +197,14 @@ export default function UserApp() {
         if (globalConfig.success && globalConfig.data && globalConfig.data.defaultProjectKey) {
           projectKey = globalConfig.data.defaultProjectKey;
           console.log('Używam projectKey z globalnej konfiguracji:', projectKey);
+        }
+      }
+
+      // Bez domyślnego projektu: pierwszy projekt z konfiguracją (zmiana przyciskiem "Zmień projekt")
+      if (!projectKey) {
+        const configured = await invoke('getConfiguredProjects', {});
+        if (configured.success && configured.projects && configured.projects.length > 0) {
+          projectKey = configured.projects[0].key;
         }
       }
       
@@ -212,22 +258,8 @@ export default function UserApp() {
       } else {
         // Domyślne wartości SLA jeśli nie ma skonfigurowanych
         console.log('Brak aktywnych reguł eskalacji z SLA, używam domyślnych wartości');
-        const defaultSla = {
-          responseTimeMinutes: {
-            P1: 15,
-            P2: 30,
-            P3: 60,
-            P4: 240
-          },
-          resolutionTimeHours: {
-            P1: 4,
-            P2: 8,
-            P3: 24,
-            P4: 72
-          }
-        };
-        console.log('Ustawiam domyślne SLA:', defaultSla);
-        setSlaData(defaultSla);
+        // Bez skonfigurowanych reguł nie pokazujemy SLA, żeby nie sugerować terminów, których nikt nie pilnuje
+        setSlaData(null);
       }
       
       // Teraz sprawdź pola (po ustawieniu SLA)
@@ -264,7 +296,8 @@ export default function UserApp() {
         }))
         .filter(f => f.id); // Usuń pola których nie ma w Jira
       
-      setFormFields(configuredFieldsWithDetails);
+      // Pole domeny ustawia wybór "Kategoria", więc nie pokazujemy go drugi raz jako zwykłe pole
+      setFormFields(configuredFieldsWithDetails.filter(f => !config.domainFieldId || f.id !== config.domainFieldId));
       
       // Pobierz nazwę i ikonę projektu
       try {
@@ -296,11 +329,14 @@ export default function UserApp() {
       }
       
       // Pobierz informacje o zespole i osobie przypisanej
-      const teamResult = await invoke('getCurrentTeam', { projectKey });
-      if (teamResult.success) {
-        setCurrentTeam(teamResult.team);
-        setAssignedPerson(teamResult.assignedPerson);
-      }
+      // Domeny (kategorie) zgłoszeń - zespół i dyżurny zależą od wybranej domeny
+      const domainsResult = await invoke('getProjectConfig', { projectKey });
+      const projectDomains = domainsResult.success && domainsResult.config
+        ? (domainsResult.config.domains || []).filter(d => d.enabled !== false)
+        : [];
+      setDomains(projectDomains);
+      setCurrentTeam(null);
+      setAssignedPerson(null);
       
       // Inicjalizuj formData z domyślnymi wartościami
       const initialData = {
@@ -357,7 +393,8 @@ export default function UserApp() {
     // Sprawdź czy to pole wielokrotnego wyboru (array)
     const isArrayField = field.schema?.type === 'array' || field.type === 'array';
     
-    if (isArrayField && (field.allowedValues && field.allowedValues.length > 0)) {
+    // singleChoice: pole wielokrotnego wyboru w Jirze, ale w formularzu jedna wartość (idzie dalej jako lista z jednym elementem)
+    if (isArrayField && !field.singleChoice && (field.allowedValues && field.allowedValues.length > 0)) {
       // Multi-select dla pól z opcjami i typem array
       const selectedValues = Array.isArray(value) ? value : (value ? [value] : []);
       
@@ -491,10 +528,12 @@ export default function UserApp() {
     try {
       setLoading(true);
       
-      const result = await invoke('createIncident', { formData: formData });
+      // Projekt wybrany w formularzu (na stronie globalnej brak projektu w kontekście)
+      const result = await invoke('createIncident', { formData: formData, projectKey: currentProjectKey || undefined });
       
       if (result.success) {
-        showFlag('success', 'Sukces', `Alert ${result.issueKey} został utworzony`);
+        showFlag('success', 'Sukces', `Alert ${result.issueKey} został utworzony` +
+          (result.assignedTeam ? `. Zespół: ${result.assignedTeam}${result.assigneeName ? `, dyżurny: ${result.assigneeName}` : ', brak dyżurnego na dziś'}` : ''));
         // Reset form
         const initialData = {};
         formFields.forEach(field => {
@@ -520,25 +559,34 @@ export default function UserApp() {
     }
   };
 
+  // Projekt dla "Zgłoszone alerty": wybrany w formularzu, z kontekstu strony, domyślny, pierwszy skonfigurowany
+  const resolveProjectKey = async () => {
+    if (currentProjectKey) return currentProjectKey;
+    try {
+      const contextResult = await invoke('getContext', {});
+      const ctx = contextResult && contextResult.context;
+      const fromContext = (ctx && ctx.extension && ctx.extension.project && ctx.extension.project.key)
+        || (ctx && ctx.project && ctx.project.key);
+      if (fromContext) return fromContext;
+    } catch (error) {
+      console.warn('Nie udało się pobrać kontekstu:', error);
+    }
+    const globalConfig = await invoke('getConfig', { configType: 'global' });
+    if (globalConfig.success && globalConfig.data && globalConfig.data.defaultProjectKey) {
+      return globalConfig.data.defaultProjectKey;
+    }
+    const configured = await invoke('getConfiguredProjects', {});
+    if (configured.success && configured.projects && configured.projects.length > 0) {
+      return configured.projects[0].key;
+    }
+    return null;
+  };
+
   const loadMyIncidents = async () => {
     try {
-      // Pobierz konfigurację projektu (użyj domyślnego projektu lub z kontekstu)
-      const globalConfig = await invoke('getConfig', { configType: 'global' });
-      let projectKey = null;
       let issueTypeId = null;
-      
-      if (globalConfig.success && globalConfig.data && globalConfig.data.defaultProjectKey) {
-        projectKey = globalConfig.data.defaultProjectKey;
-      }
-      
-      if (!projectKey) {
-        // Spróbuj pobrać z kontekstu
-        const contextResult = await invoke('resolver', {});
-        if (contextResult.context && contextResult.context.extension && contextResult.context.extension.project) {
-          projectKey = contextResult.context.extension.project.key;
-        }
-      }
-      
+      const projectKey = await resolveProjectKey();
+
       // Jeśli mamy projectKey, spróbuj pobrać konfigurację projektu i issueTypeId
       if (projectKey) {
         const projectConfigResult = await invoke('getProjectConfig', { projectKey });
@@ -740,12 +788,12 @@ export default function UserApp() {
               }} 
             />
           )}
-          <h1 style={{ margin: 0 }}>{projectName || 'DrEryk Alert'}</h1>
+          <h1 style={{ margin: 0 }}>{projectName || 'drEryk Alert'}</h1>
         </div>
         {projectName && (
           <div style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
             {/* Przycisk "Zmień projekt" widoczny TYLKO w global page (nie w kontekście projektu) */}
-            {!isProjectContext && currentRoute === '/report' && (
+            {!isProjectContext && (
               <button
                 onClick={() => setShowProjectSelector(!showProjectSelector)}
                 style={{
@@ -1072,28 +1120,38 @@ export default function UserApp() {
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div style={{ 
-                    padding: '12px 16px', 
-                    backgroundColor: '#F4F5F7', 
-                    borderRadius: '3px', 
-                    border: '1px solid #DFE1E6',
-                    marginBottom: '16px',
-                    color: '#5E6C84',
-                    fontSize: '14px'
-                  }}>
-                    Ładowanie informacji o SLA...
-                  </div>
-                )}
+                ) : null}
                 
                 <form onSubmit={handleSubmit}>
+                  {domains.length > 0 && (
+                <div className="form-group">
+                  <label className="form-label" htmlFor="domain">
+                    Kategoria (domena) *
+                  </label>
+                  <div className="form-helper" style={{ fontSize: '12px', color: '#666', marginBottom: '5px', fontStyle: 'italic' }}>
+                    Alert trafi do zespołu odpowiedzialnego za wybraną domenę
+                  </div>
+                  <select
+                    id="domain"
+                    className="form-select"
+                    value={formData.domain || ''}
+                    onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
+                    required
+                  >
+                    <option value="">-- Wybierz kategorię --</option>
+                    {domains.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+                  )}
                   {/* Pola standardowe Jira - zawsze widoczne */}
                 <div className="form-group">
                   <label className="form-label" htmlFor="summary">
                     Podsumowanie *
                   </label>
                   <div className="form-helper" style={{ fontSize: '12px', color: '#666', marginBottom: '5px', fontStyle: 'italic' }}>
-                    Krótkie podsumowanie alertu (będzie widoczne jako tytuł zgłoszenia)
+                    Krótkie podsumowanie alertu (będzie widoczne jako tytuł alertu)
                   </div>
                   <input
                     id="summary"
@@ -1125,6 +1183,15 @@ export default function UserApp() {
                     required
                   />
                 </div>
+
+                {/* Podpowiedzi na żądanie: kategoria i podobne alerty */}
+                <SmartHints
+                  showFlag={showFlag}
+                  projectKey={currentProjectKey}
+                  summary={formData.summary}
+                  description={formData.description}
+                  onPickDomain={(domainId) => setFormData({ ...formData, domain: domainId })}
+                />
 
                 {/* Skonfigurowane pola niestandardowe */}
                 {formFields.map(field => renderField(field))}
@@ -1545,6 +1612,7 @@ export default function UserApp() {
                         >
                           Data utworzenia {sortField === 'created' && (sortDirection === 'asc' ? '↑' : '↓')}
                         </th>
+                        <th>Podobne</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1620,8 +1688,8 @@ export default function UserApp() {
                       const slaExceeded = checkSLAExceeded(incident);
                       
                       return (
-                        <tr 
-                          key={index}
+                        <React.Fragment key={incident.key}>
+                        <tr
                           className={slaExceeded ? 'row-sla-exceeded' : ''}
                           style={slaExceeded ? {
                             border: '2px solid rgba(222, 53, 11, 0.6)',
@@ -1675,7 +1743,29 @@ export default function UserApp() {
                           <td>{incident.assignee || 'Nieprzypisane'}</td>
                           <td>{getTimeInStatus(incident.statusChanged)}</td>
                           <td>{incident.created ? new Date(incident.created).toLocaleString('pl-PL') : '-'}</td>
+                          <td>
+                            <button
+                              className="btn btn-default btn-small"
+                              onClick={() => setSimilarTarget(similarTarget && similarTarget.key === incident.key ? null : { key: incident.key, summary: incident.summary })}
+                              title="Pokaż podobne alerty"
+                            >
+                              Podobne
+                            </button>
+                          </td>
                         </tr>
+                        {similarTarget && similarTarget.key === incident.key && (
+                          <tr>
+                            <td colSpan={9} style={{ padding: 0 }}>
+                              <SimilarToAlert
+                                key={similarTarget.key}
+                                showFlag={showFlag}
+                                target={similarTarget}
+                                onClose={() => setSimilarTarget(null)}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
                       );
                       })}
                     </tbody>
@@ -1714,7 +1804,7 @@ export default function UserApp() {
                           Strona {currentPage} z {getTotalPages()}
                         </span>
                         <span style={{ fontSize: '14px', color: '#5E6C84' }}>
-                          ({getFilteredAndSortedIncidents().length} zgłoszeń)
+                          ({getFilteredAndSortedIncidents().length} alertów)
                         </span>
                       </div>
                       
@@ -1736,7 +1826,7 @@ export default function UserApp() {
                   
                   {getFilteredAndSortedIncidents().length === 0 && (filterStatuses.length > 0 || filterPriorities.length > 0 || filterAssignees.length > 0) && (
                     <div className="message-box message-info" style={{ marginTop: '16px' }}>
-                      Brak zgłoszeń spełniających wybrane filtry.
+                      Brak alertów spełniających wybrane filtry.
                     </div>
                   )}
                 </>
@@ -1749,10 +1839,7 @@ export default function UserApp() {
               issueTypeId={statisticsIssueTypeId}
             />
           ) : activeTab === 'schedule' ? (
-            <Schedule 
-              showFlag={showFlag}
-              projectKey={currentProjectKey}
-            />
+            <DutyScheduleTab showFlag={showFlag} projectKey={currentProjectKey} />
           ) : null}
         </div>
       </div>

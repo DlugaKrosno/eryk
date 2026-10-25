@@ -6,9 +6,11 @@ import './App.css';
 import GeneralSettings from './components/GeneralSettings';
 import FieldsConfig from './components/FieldsConfig';
 import PriorityRules from './components/PriorityRules';
-import EscalationRules from './components/EscalationRules';
+import DomainsConfig from './components/DomainsConfig';
+import SetupChecklist from './components/SetupChecklist';
+import ConfigTransfer from './components/ConfigTransfer';
+import EscalationPolicy from './components/EscalationPolicy';
 import TeamsEscalation from './components/TeamsEscalation';
-import TeamsIntegration from './components/TeamsIntegration';
 import AuditLog from './components/AuditLog';
 
 function App() {
@@ -18,11 +20,9 @@ function App() {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState('');
   const [timeRange, setTimeRange] = useState('all'); // '24h', 'week', 'month', 'all'
-  const [showActionDialog, setShowActionDialog] = useState(null); // 'reprocess' or 'sla' or null
+  const [showActionDialog, setShowActionDialog] = useState(null); // 'reprocess' or null
   const [issuesForRecalculation, setIssuesForRecalculation] = useState([]); // Lista zgłoszeń do przeliczenia
-  const [issuesForSLACheck, setIssuesForSLACheck] = useState([]); // Lista zgłoszeń z przekroczonym SLA
   const [selectedIssues, setSelectedIssues] = useState([]); // Wybrane zgłoszenia do przeliczenia
-  const [selectedSLAIssues, setSelectedSLAIssues] = useState([]); // Wybrane zgłoszenia do przypomnienia SLA
   const [loadingIssues, setLoadingIssues] = useState(false); // Ładowanie listy zgłoszeń
 
   useEffect(() => {
@@ -64,22 +64,9 @@ function App() {
     }
   };
 
-  const handleProjectChange = async (projectKey) => {
+  // Wybór projektu w panelu dotyczy tylko konfiguracji; formularz alertu sam wybiera projekt
+  const handleProjectChange = (projectKey) => {
     setSelectedProject(projectKey);
-    
-    // Zapisz wybrany projekt jako domyślny w global_config
-    try {
-      await invoke('saveConfig', {
-        configType: 'global',
-        data: { 
-          defaultProjectKey: projectKey,
-          targetProjectKey: projectKey // dla kompatybilności wstecznej
-        }
-      });
-      showFlag('success', 'Zapisano', `Wybrano projekt: ${projectKey}`);
-    } catch (error) {
-      console.error('Błąd zapisywania projektu:', error);
-    }
   };
 
   const showFlag = (type, title, description) => {
@@ -88,67 +75,6 @@ function App() {
     setTimeout(() => {
       setFlags(prev => prev.filter(f => f.id !== id));
     }, 5000);
-  };
-
-  // Pobierz zgłoszenia dla SLA check
-  const handleLoadIssuesForSLACheck = async () => {
-    if (!selectedProject) {
-      showFlag('error', 'Błąd', 'Najpierw wybierz projekt');
-      return;
-    }
-    
-    try {
-      setLoadingIssues(true);
-      const result = await invoke('getIssuesForSLACheck', {
-        projectKey: selectedProject,
-        timeRange: timeRange
-      });
-      
-      if (result.success && result.issues) {
-        setIssuesForSLACheck(result.issues);
-        setSelectedSLAIssues([]); // Reset wyboru
-      } else {
-        showFlag('error', 'Błąd', result.error || 'Nie udało się pobrać zgłoszeń');
-      }
-    } catch (error) {
-      showFlag('error', 'Błąd', error.message);
-    } finally {
-      setLoadingIssues(false);
-    }
-  };
-
-  // Wyślij zbiorcze przypomnienie SLA dla wybranych zgłoszeń
-  const handleSendBatchSLAReminder = async () => {
-    if (!selectedProject) {
-      showFlag('error', 'Błąd', 'Najpierw wybierz projekt');
-      return;
-    }
-    
-    if (selectedSLAIssues.length === 0) {
-      showFlag('error', 'Błąd', 'Nie wybrano żadnych zgłoszeń');
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      const result = await invoke('sendBatchSLAReminder', {
-        projectKey: selectedProject,
-        issueKeys: selectedSLAIssues
-      });
-      
-      if (result.success) {
-        showFlag('success', 'Sukces', result.message || 'Zbiorcze przypomnienie wysłane pomyślnie');
-        setShowActionDialog(null);
-        setIssuesForSLACheck([]);
-        setSelectedSLAIssues([]);
-      } else {
-        showFlag('error', 'Błąd', result.error || 'Nie udało się wysłać przypomnienia');
-      }
-    } catch (error) {
-      showFlag('error', 'Błąd', error.message);
-    } finally {
-      setLoading(false);
-    }
   };
 
   // Pobierz zgłoszenia do przeliczenia
@@ -169,7 +95,7 @@ function App() {
         setIssuesForRecalculation(result.issues);
         setSelectedIssues([]); // Reset wyboru
       } else {
-        showFlag('error', 'Błąd', result.error || 'Nie udało się pobrać zgłoszeń');
+        showFlag('error', 'Błąd', result.error || 'Nie udało się pobrać alertów');
       }
     } catch (error) {
       showFlag('error', 'Błąd', error.message);
@@ -181,11 +107,11 @@ function App() {
   // Przelicz wybrane zgłoszenia
   const handleReprocessSelected = async () => {
     if (selectedIssues.length === 0) {
-      showFlag('error', 'Błąd', 'Wybierz przynajmniej jedno zgłoszenie do przeliczenia');
+      showFlag('error', 'Błąd', 'Wybierz przynajmniej jeden alert do przeliczenia');
       return;
     }
     
-    if (!window.confirm(`Czy na pewno chcesz przeliczyć ${selectedIssues.length} wybranych zgłoszeń? To może zająć chwilę.`)) {
+    if (!window.confirm(`Czy na pewno chcesz przeliczyć ${selectedIssues.length} wybranych alertów? To może zająć chwilę.`)) {
       return;
     }
     
@@ -197,13 +123,13 @@ function App() {
       });
       
       if (result.success) {
-        showFlag('success', 'Przetworzono zgłoszenia', result.message);
+        showFlag('success', 'Przetworzono alerty', result.message);
         // Wyczyść listę i wybór
         setIssuesForRecalculation([]);
         setSelectedIssues([]);
         setShowActionDialog(null);
       } else {
-        showFlag('error', 'Błąd', result.error || 'Nie udało się przetworzyć zgłoszeń');
+        showFlag('error', 'Błąd', result.error || 'Nie udało się przetworzyć alertów');
       }
     } catch (error) {
       showFlag('error', 'Błąd', error.message);
@@ -232,33 +158,13 @@ function App() {
     }
   };
 
-  // Toggle dla zgłoszeń SLA
-  const handleToggleSLAIssue = (issueKey) => {
-    setSelectedSLAIssues(prev => {
-      if (prev.includes(issueKey)) {
-        return prev.filter(key => key !== issueKey);
-      } else {
-        return [...prev, issueKey];
-      }
-    });
-  };
-
-  // Zaznacz/odznacz wszystkie (SLA)
-  const handleToggleAllSLAIssues = (checked) => {
-    if (checked) {
-      setSelectedSLAIssues(issuesForSLACheck.map(issue => issue.key));
-    } else {
-      setSelectedSLAIssues([]);
-    }
-  };
-
   const tabs = [
-    { label: 'Ustawienia Ogólne', component: <GeneralSettings showFlag={showFlag} selectedProject={selectedProject} onProjectChange={handleProjectChange} /> },
+    { label: 'Ustawienia Ogólne', component: <><GeneralSettings showFlag={showFlag} selectedProject={selectedProject} onProjectChange={handleProjectChange} /><ConfigTransfer showFlag={showFlag} selectedProject={selectedProject} /></> },
+    { label: 'Domeny', component: <DomainsConfig showFlag={showFlag} selectedProject={selectedProject} /> },
+    { label: 'Zespoły', component: <TeamsEscalation showFlag={showFlag} selectedProject={selectedProject} onProjectChange={handleProjectChange} /> },
+    { label: 'Eskalacje', component: <EscalationPolicy showFlag={showFlag} selectedProject={selectedProject} /> },
     { label: 'Konfiguracja Pól', component: <FieldsConfig showFlag={showFlag} selectedProject={selectedProject} onProjectChange={handleProjectChange} /> },
     { label: 'Reguły Priorytetyzacji', component: <PriorityRules showFlag={showFlag} selectedProject={selectedProject} onProjectChange={handleProjectChange} /> },
-    { label: 'Reguły Eskalacji', component: <EscalationRules showFlag={showFlag} selectedProject={selectedProject} onProjectChange={handleProjectChange} /> },
-    { label: 'Zespoły', component: <TeamsEscalation showFlag={showFlag} selectedProject={selectedProject} onProjectChange={handleProjectChange} /> },
-    { label: 'Integracja Teams', component: <TeamsIntegration showFlag={showFlag} selectedProject={selectedProject} onProjectChange={handleProjectChange} /> },
     { label: 'Dziennik Audytu', component: <AuditLog selectedProject={selectedProject} /> }
   ];
 
@@ -297,8 +203,8 @@ function App() {
       <div className="admin-header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div>
-            <h1>DrEryk Alert - Panel Administratora</h1>
-            <p>Skonfiguruj pola, reguły priorytetyzacji, eskalacje zespołów i integrację Microsoft Teams</p>
+            <h1>drEryk Alert - Panel Administratora</h1>
+            <p>Skonfiguruj domeny, zespoły z dyżurami, powiadomienia Microsoft Teams, pola formularza i reguły priorytetyzacji</p>
           </div>
           <div style={{ display: 'flex', gap: '10px', flexDirection: 'column', alignItems: 'flex-end', position: 'relative' }}>
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -309,14 +215,6 @@ function App() {
                 style={{ height: 'fit-content' }}
               >
                 🔄 Przelicz Wszystkie
-              </button>
-              <button 
-                className="button button-primary"
-                onClick={() => setShowActionDialog('sla')}
-                disabled={loading || !selectedProject}
-                style={{ height: 'fit-content' }}
-              >
-                🔍 Sprawdź SLA
               </button>
             </div>
             {showActionDialog && (
@@ -379,14 +277,14 @@ function App() {
                             disabled={loadingIssues}
                             style={{ height: 'fit-content' }}
                           >
-                            {loadingIssues ? 'Pobieram...' : 'Pobierz zgłoszenia'}
+                            {loadingIssues ? 'Pobieram...' : 'Pobierz alerty'}
                           </button>
                         </div>
                       </>
                     ) : (
                       <>
                         <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <h3 style={{ margin: 0 }}>Znaleziono {issuesForRecalculation.length} zgłoszeń</h3>
+                          <h3 style={{ margin: 0 }}>Znaleziono {issuesForRecalculation.length} alertów</h3>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                             <input
                               type="checkbox"
@@ -484,143 +382,6 @@ function App() {
                       </>
                     )}
                   </>
-                ) : showActionDialog === 'sla' ? (
-                  <>
-                    {issuesForSLACheck.length === 0 ? (
-                      <>
-                        <div style={{ marginBottom: '10px' }}>
-                          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                            Przedział czasowy:
-                          </label>
-                          <select
-                            value={timeRange}
-                            onChange={(e) => setTimeRange(e.target.value)}
-                            style={{
-                              width: '100%',
-                              padding: '8px',
-                              fontSize: '14px',
-                              border: '1px solid #dfe1e6',
-                              borderRadius: '4px'
-                            }}
-                          >
-                            <option value="24h">Ostatnie 24 godziny</option>
-                            <option value="week">Ostatni tydzień</option>
-                            <option value="month">Ostatni miesiąc</option>
-                            <option value="all">Wszystkie</option>
-                          </select>
-                        </div>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                          <button
-                            className="button button-secondary"
-                            onClick={() => setShowActionDialog(null)}
-                            style={{ height: 'fit-content' }}
-                          >
-                            Anuluj
-                          </button>
-                          <button
-                            className="button button-primary"
-                            onClick={handleLoadIssuesForSLACheck}
-                            disabled={loadingIssues}
-                            style={{ height: 'fit-content' }}
-                          >
-                            {loadingIssues ? 'Ładuję...' : 'Pobierz listę'}
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <h4 style={{ marginTop: 0, marginBottom: '15px' }}>
-                          Zgłoszenia z przekroczonym SLA
-                        </h4>
-                        <div style={{ 
-                          maxHeight: '400px', 
-                          overflow: 'auto',
-                          border: '1px solid #dfe1e6',
-                          borderRadius: '4px',
-                          marginBottom: '15px'
-                        }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f4f5f7', zIndex: 1 }}>
-                              <tr>
-                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #dfe1e6' }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedSLAIssues.length === issuesForSLACheck.length && issuesForSLACheck.length > 0}
-                                    onChange={(e) => handleToggleAllSLAIssues(e.target.checked)}
-                                    style={{ cursor: 'pointer' }}
-                                  />
-                                </th>
-                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #dfe1e6' }}>Klucz</th>
-                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #dfe1e6' }}>Podsumowanie</th>
-                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #dfe1e6' }}>Status</th>
-                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #dfe1e6' }}>Priorytet</th>
-                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #dfe1e6' }}>Przypisane</th>
-                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #dfe1e6' }}>Czas w statusie</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {issuesForSLACheck.map(issue => (
-                                <tr key={issue.key} style={{ borderBottom: '1px solid #dfe1e6' }}>
-                                  <td style={{ padding: '8px' }}>
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedSLAIssues.includes(issue.key)}
-                                      onChange={() => handleToggleSLAIssue(issue.key)}
-                                      style={{ cursor: 'pointer' }}
-                                    />
-                                  </td>
-                                  <td style={{ padding: '8px', fontWeight: 'bold' }}>{issue.key}</td>
-                                  <td style={{ padding: '8px' }}>{issue.summary}</td>
-                                  <td style={{ padding: '8px' }}>{issue.status}</td>
-                                  <td style={{ padding: '8px' }}>{issue.priority}</td>
-                                  <td style={{ padding: '8px' }}>{issue.assignee}</td>
-                                  <td style={{ padding: '8px' }}>
-                                    {Math.floor(issue.ageInMinutes / 60)}h {issue.ageInMinutes % 60}min
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '14px', color: '#5e6c84' }}>
-                            Wybrano: {selectedSLAIssues.length} z {issuesForSLACheck.length}
-                          </span>
-                          <div style={{ display: 'flex', gap: '10px' }}>
-                            <button
-                              className="button button-secondary"
-                              onClick={() => {
-                                setIssuesForSLACheck([]);
-                                setSelectedSLAIssues([]);
-                              }}
-                              style={{ height: 'fit-content' }}
-                            >
-                              Wróć
-                            </button>
-                            <button
-                              className="button button-secondary"
-                              onClick={() => {
-                                setShowActionDialog(null);
-                                setIssuesForSLACheck([]);
-                                setSelectedSLAIssues([]);
-                              }}
-                              style={{ height: 'fit-content' }}
-                            >
-                              Anuluj
-                            </button>
-                            <button
-                              className="button button-primary"
-                              onClick={handleSendBatchSLAReminder}
-                              disabled={loading || selectedSLAIssues.length === 0}
-                              style={{ height: 'fit-content' }}
-                            >
-                              {loading ? 'Wysyłam...' : `Wyślij przypomnienie (${selectedSLAIssues.length})`}
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </>
                 ) : null}
               </div>
             )}
@@ -679,6 +440,12 @@ function App() {
           </div>
         </div>
       </div>
+
+      <SetupChecklist
+        key={`${selectedProject}-${activeTab}-${flags.length}`}
+        projectKey={selectedProject}
+        onNavigate={(label) => { const i = tabs.findIndex(t => t.label === label); if (i >= 0) setActiveTab(i); }}
+      />
 
       {/* Tabs */}
       <div className="tabs-container">

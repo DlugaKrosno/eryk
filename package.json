@@ -1,29 +1,22 @@
 {
   "name": "jira-alert-management",
-  "version": "2.6.0",
-  "description": "Comprehensive alert management system for Jira Cloud with automated prioritization, team assignment, and Microsoft Teams integration",
+  "version": "3.0.0",
+  "description": "Zarządzanie alertami w Jira Cloud: domeny, zespoły z dyżurami, automatyczny priorytet i powiadomienia Microsoft Teams",
   "main": "src/index.js",
-  "author": "DrEryk",
+  "author": "drEryk",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-org/jira-alert-management"
-  },
   "scripts": {
-    "build": "npm run build:user && npm run build:admin && npm run build:issue-panel",
-    "build:user": "cd static/user && npm install --legacy-peer-deps && set NODE_OPTIONS=--openssl-legacy-provider && npm run build",
-    "build:admin": "cd static/admin && npm install --legacy-peer-deps && set NODE_OPTIONS=--openssl-legacy-provider && npm run build",
-    "build:issue-panel": "cd static/issue-panel && npm install --legacy-peer-deps && set NODE_OPTIONS=--openssl-legacy-provider && npm run build",
+    "build": "cd static/smart && npm install --legacy-peer-deps && npm run build",
     "deploy": "forge deploy",
     "deploy:prod": "forge deploy --environment production",
-    "lint": "echo 'Linting skipped - add ESLint if needed'",
-    "test": "echo 'Tests skipped - add test framework if needed'"
+    "lint": "forge lint",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "@atlaskit/css-reset": "^7.3.9",
     "@forge/api": "^3.0.0",
     "@forge/resolver": "^1.5.0",
-    "@forge/storage": "^1.0.0"
+    "@forge/kvs": "^2.1.0"
   },
   "devDependencies": {
     "@forge/cli": "^12.0.0"

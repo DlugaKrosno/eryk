@@ -101,6 +101,20 @@ function FieldsConfig({ showFlag, selectedProject, onProjectChange }) {
     );
   };
 
+  // Pole wielokrotnego wyboru można w formularzu ograniczyć do jednej wartości
+  const handleToggleSingleChoice = (fieldId) => {
+    setConfiguredFields(prev =>
+      prev.map(f =>
+        f.id === fieldId ? { ...f, singleChoice: !f.singleChoice } : f
+      )
+    );
+  };
+
+  const isMultiSelect = (fieldId) => {
+    const available = availableFields.find(f => f.id === fieldId);
+    return !!available && available.type === 'array' && Array.isArray(available.allowedValues) && available.allowedValues.length > 0;
+  };
+
   const handleToggleRequired = (fieldId) => {
     setConfiguredFields(prev =>
       prev.map(f =>
@@ -113,7 +127,7 @@ function FieldsConfig({ showFlag, selectedProject, onProjectChange }) {
     e.preventDefault();
     
     if (!issueTypeId) {
-      showFlag('error', 'Błąd', 'Najpierw wybierz typ zgłoszenia w zakładce "Ustawienia ogólne"');
+      showFlag('error', 'Błąd', 'Najpierw wybierz typ alertu w zakładce "Ustawienia ogólne"');
       return;
     }
     
@@ -172,7 +186,7 @@ function FieldsConfig({ showFlag, selectedProject, onProjectChange }) {
   if (!issueTypeId) {
     return (
       <div className="message-box message-warning">
-        <strong>Najpierw wybierz typ zgłoszenia:</strong> Przejdź do zakładki "Ustawienia ogólne" i wybierz typ zgłoszenia dla projektu {selectedProject}, a następnie wróć tutaj aby skonfigurować pola formularza.
+        <strong>Najpierw wybierz typ alertu:</strong> Przejdź do zakładki "Ustawienia ogólne" i wybierz typ zgłoszenia dla projektu {selectedProject}, a następnie wróć tutaj aby skonfigurować pola formularza.
       </div>
     );
   }
@@ -187,14 +201,14 @@ function FieldsConfig({ showFlag, selectedProject, onProjectChange }) {
       </div>
 
       <div className="message-box message-info">
-        <strong>Informacja:</strong> Wyświetlane są tylko pola dostępne dla typu zgłoszenia wybranego w "Ustawienia ogólne".
+        <strong>Informacja:</strong> Wyświetlane są tylko pola dostępne dla typu alertu wybranego w "Ustawienia ogólne".
         <br />
         Pola oznaczone jako "Wymagane w Jira" są automatycznie wymagane w formularzu.
       </div>
 
       {availableFields.length === 0 ? (
         <div className="message-box message-warning">
-          <strong>Brak dostępnych pól:</strong> Nie znaleziono dostępnych pól dla wybranego typu zgłoszenia. Sprawdź czy typ zgłoszenia jest poprawnie skonfigurowany.
+          <strong>Brak dostępnych pól:</strong> Nie znaleziono dostępnych pól dla wybranego typu alertu. Sprawdź czy typ zgłoszenia jest poprawnie skonfigurowany.
         </div>
       ) : (
         <form onSubmit={handleSubmit}>
@@ -249,7 +263,7 @@ function FieldsConfig({ showFlag, selectedProject, onProjectChange }) {
               })}
             </div>
             <div className="form-helper">
-              Zaznacz pola, które mają być dostępne w formularzu zgłoszenia. Pola oznaczone jako "Wymagane w Jira" są automatycznie wymagane.
+              Zaznacz pola, które mają być dostępne w formularzu alertu. Pola oznaczone jako "Wymagane w Jira" są automatycznie wymagane.
             </div>
           </div>
 
@@ -263,6 +277,16 @@ function FieldsConfig({ showFlag, selectedProject, onProjectChange }) {
                       <strong>{field.name}</strong>
                       {field.required && <strong style={{ color: '#d63031', marginLeft: '10px' }}>(wymagane)</strong>}
                     </div>
+                    {isMultiSelect(field.id) && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 8px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!field.singleChoice}
+                          onChange={() => handleToggleSingleChoice(field.id)}
+                        />
+                        <span style={{ fontSize: '13px' }}>Pojedynczy wybór: w formularzu można wskazać tylko jedną wartość (pole w Jirze zostaje wielokrotnego wyboru)</span>
+                      </label>
+                    )}
                     <div className="form-group" style={{ marginBottom: '0' }}>
                       <label className="form-label" style={{ fontSize: '13px' }} htmlFor={`desc-${field.id}`}>
                         Opis pola (wyświetlany jako podpowiedź w formularzu):
@@ -277,7 +301,7 @@ function FieldsConfig({ showFlag, selectedProject, onProjectChange }) {
                         style={{ fontSize: '13px' }}
                       />
                       <div className="form-helper" style={{ fontSize: '12px' }}>
-                        Opis będzie wyświetlany jako podpowiedź pod tytułem pola w formularzu zgłoszenia
+                        Opis będzie wyświetlany jako podpowiedź pod tytułem pola w formularzu alertu
                       </div>
                     </div>
                   </div>

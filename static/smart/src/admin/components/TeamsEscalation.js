@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@forge/bridge';
+import UserMultiSelect from './UserMultiSelect';
+import DutySchedule from './DutySchedule';
+
+// Wpisy harmonogramu zapisane wcześniej nie mają id - potrzebne do edycji i usuwania
+const withIds = (list) => (Array.isArray(list) ? list : []).map((entry, i) => (
+  entry.id ? entry : { ...entry, id: `shift-legacy-${i}` }
+));
 
 function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
   const [loading, setLoading] = useState(true);
@@ -12,8 +19,11 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
   const [newTeam, setNewTeam] = useState({
     name: '',
     description: '',
-    members: '',
-    teamsWebhookUrl: ''
+    teamLeaders: [],
+    productOwners: [],
+    delegates: [],
+    teamsWebhookUrl: '',
+    dutyDmWorkflowUrl: ''
   });
 
   useEffect(() => {
@@ -52,14 +62,10 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
       const projectConfigResult = await invoke('getProjectConfig', { projectKey: selectedProject });
       
       if (projectConfigResult.success && projectConfigResult.config) {
-        // Pobierz escalationTeams z konfiguracji projektu lub z globalnych
-        const teamsData = projectConfigResult.config.escalationTeams || 
-                         (await invoke('getConfig', { configType: 'teams' })).data || [];
+        const teamsData = projectConfigResult.config.escalationTeams || [];
         setTeams(Array.isArray(teamsData) ? teamsData : []);
       } else {
-        // Fallback do globalnych zespołów
-        const result = await invoke('getConfig', { configType: 'teams' });
-        setTeams(result.success && result.data ? (Array.isArray(result.data) ? result.data : []) : []);
+        setTeams([]);
       }
     } catch (error) {
       showFlag('error', 'Błąd', 'Nie udało się załadować zespołów');
@@ -77,14 +83,10 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
       const projectConfigResult = await invoke('getProjectConfig', { projectKey: selectedProject });
       
       if (projectConfigResult.success && projectConfigResult.config) {
-        // Pobierz teamSchedule z konfiguracji projektu lub z globalnych
-        const scheduleData = projectConfigResult.config.teamSchedule || 
-                            (await invoke('getConfig', { configType: 'schedule' })).data || [];
-        setSchedule(Array.isArray(scheduleData) ? scheduleData : []);
+        const scheduleData = projectConfigResult.config.teamSchedule || [];
+        setSchedule(withIds(scheduleData));
       } else {
-        // Fallback do globalnego harmonogramu
-        const result = await invoke('getConfig', { configType: 'schedule' });
-        setSchedule(result.success && result.data ? (Array.isArray(result.data) ? result.data : []) : []);
+        setSchedule([]);
       }
     } catch (error) {
       console.error('Błąd ładowania harmonogramu:', error);
@@ -118,9 +120,13 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
     return result.success;
   };
 
+  const userLabels = (ids) => (ids || [])
+    .map(id => (users.find(u => u.accountId === id) || {}).displayName || id)
+    .join(', ') || '-';
+
   const handleTestTeamWebhook = async (team) => {
     if (!team.teamsWebhookUrl || !team.teamsWebhookUrl.trim()) {
-      showFlag('error', 'Błąd', 'Zespół nie ma skonfigurowanego webhooka Teams');
+      showFlag('error', 'Błąd', 'Zespół nie ma ustawionego adresu Teams Workflow');
       return;
     }
     
@@ -166,8 +172,11 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
         setNewTeam({
           name: '',
           description: '',
-          members: '',
-          teamsWebhookUrl: ''
+          teamLeaders: [],
+          productOwners: [],
+          delegates: [],
+          teamsWebhookUrl: '',
+          dutyDmWorkflowUrl: ''
         });
       } else {
         showFlag('error', 'Błąd', 'Nie udało się zapisać zespołu');
@@ -262,48 +271,23 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
     return result.success;
   };
 
-  const handleUpdateSchedule = async () => {
-    if (!selectedProject) {
-      showFlag('error', 'Błąd', 'Wybierz projekt z listy powyżej');
-      return;
-    }
-    
+  const handleSaveSchedule = async (updatedSchedule) => {
     try {
       setSaving(true);
-      
-      const success = await saveScheduleToProject(schedule);
-      
+      const success = await saveScheduleToProject(updatedSchedule);
       if (success) {
-        showFlag('success', 'Zapisano', 'Harmonogram zapisany');
+        setSchedule(updatedSchedule);
+        showFlag('success', 'Zapisano', 'Harmonogram dyżurów zapisany');
       } else {
         showFlag('error', 'Błąd', 'Nie udało się zapisać harmonogramu');
       }
+      return success;
     } catch (error) {
       showFlag('error', 'Błąd', 'Nie udało się zapisać harmonogramu');
+      return false;
     } finally {
       setSaving(false);
     }
-  };
-
-  const addWeekToSchedule = () => {
-    const newWeek = {
-      weekNumber: schedule.length + 1,
-      teamId: teams.length > 0 ? teams[0].id : '',
-      startDate: '',
-      endDate: '',
-      assignedPerson: '' // Account ID osoby przypisanej do zgłoszeń w tym tygodniu
-    };
-    setSchedule([...schedule, newWeek]);
-  };
-
-  const updateScheduleWeek = (index, field, value) => {
-    const updatedSchedule = [...schedule];
-    updatedSchedule[index][field] = value;
-    setSchedule(updatedSchedule);
-  };
-
-  const removeWeekFromSchedule = (index) => {
-    setSchedule(schedule.filter((_, i) => i !== index));
   };
 
   if (loading) {
@@ -317,9 +301,9 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
   return (
     <div>
       <div className="section-header">
-        <h3 className="section-title">Zespoły i Eskalacja</h3>
+        <h3 className="section-title">Zespoły i dyżury</h3>
         <p className="section-description">
-          Zarządzaj zespołami wsparcia, SLA, harmonogramem dyżurów i integracją Teams.
+          Zarządzaj zespołami, delegatami do dyżuru, harmonogramem i powiadomieniami Teams. Zespoły powstają też automatycznie przy dodawaniu domeny.
         </p>
       </div>
 
@@ -337,8 +321,10 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
               <tr>
                 <th>Nazwa</th>
                 <th>Opis</th>
-                <th>Członkowie</th>
-                <th>Teams Webhook</th>
+                <th>Team leaderzy</th>
+                <th>Product ownerzy</th>
+                <th>Delegaci do dyżuru</th>
+                <th>Powiadomienia Teams</th>
                 <th>Akcje</th>
               </tr>
             </thead>
@@ -371,30 +357,61 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
                   </td>
                   <td>
                     {editingTeam && editingTeam.id === team.id ? (
-                      <textarea
-                        className="form-textarea"
-                        value={editingTeam.members || ''}
-                        onChange={(e) => setEditingTeam({ ...editingTeam, members: e.target.value })}
-                        rows={2}
+                      <UserMultiSelect
+                        users={users}
+                        value={editingTeam.teamLeaders}
+                        onChange={(teamLeaders) => setEditingTeam({ ...editingTeam, teamLeaders })}
                       />
                     ) : (
-                      <small>{team.members || '-'}</small>
+                      <small>{userLabels(team.teamLeaders)}</small>
                     )}
                   </td>
                   <td>
                     {editingTeam && editingTeam.id === team.id ? (
-                      <input
-                        type="url"
-                        className="form-input"
-                        placeholder="https://..."
-                        value={editingTeam.teamsWebhookUrl || ''}
-                        onChange={(e) => setEditingTeam({ ...editingTeam, teamsWebhookUrl: e.target.value })}
+                      <UserMultiSelect
+                        users={users}
+                        value={editingTeam.productOwners}
+                        onChange={(productOwners) => setEditingTeam({ ...editingTeam, productOwners })}
                       />
+                    ) : (
+                      <small>{userLabels(team.productOwners)}</small>
+                    )}
+                  </td>
+                  <td>
+                    {editingTeam && editingTeam.id === team.id ? (
+                      <UserMultiSelect
+                        users={users}
+                        value={editingTeam.delegates}
+                        onChange={(delegates) => setEditingTeam({ ...editingTeam, delegates })}
+                      />
+                    ) : (
+                      <small>{userLabels(team.delegates)}</small>
+                    )}
+                  </td>
+                  <td>
+                    {editingTeam && editingTeam.id === team.id ? (
+                      <div>
+                        <input
+                          type="url"
+                          className="form-input"
+                          placeholder="Workflow: kanał zespołu"
+                          value={editingTeam.teamsWebhookUrl || ''}
+                          onChange={(e) => setEditingTeam({ ...editingTeam, teamsWebhookUrl: e.target.value })}
+                        />
+                        <input
+                          type="url"
+                          className="form-input"
+                          style={{ marginTop: '6px' }}
+                          placeholder="Workflow: wiadomość do dyżurnego (opcjonalnie)"
+                          value={editingTeam.dutyDmWorkflowUrl || ''}
+                          onChange={(e) => setEditingTeam({ ...editingTeam, dutyDmWorkflowUrl: e.target.value })}
+                        />
+                      </div>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {team.teamsWebhookUrl ? (
                           <>
-                            <span>✓ Skonfigurowany</span>
+                            <span>✓ Kanał{team.dutyDmWorkflowUrl ? ' + DM' : ''}</span>
                             <button
                               className="btn btn-default btn-small"
                               onClick={() => handleTestTeamWebhook(team)}
@@ -404,7 +421,7 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
                             </button>
                           </>
                         ) : (
-                          <span>✗ Brak</span>
+                          <span>✗ Nie ustawiono</span>
                         )}
                       </div>
                     )}
@@ -488,27 +505,61 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Członkowie (adresy email, oddzielone przecinkami)</label>
-          <textarea
-            className="form-textarea"
-            placeholder="jan.kowalski@example.com, anna.nowak@example.com"
-            value={newTeam.members}
-            onChange={(e) => setNewTeam({ ...newTeam, members: e.target.value })}
-            rows={3}
+          <label className="form-label">Team leaderzy (obserwatorzy alertów zespołu)</label>
+          <UserMultiSelect
+            users={users}
+            value={newTeam.teamLeaders}
+            onChange={(teamLeaders) => setNewTeam({ ...newTeam, teamLeaders })}
           />
         </div>
 
         <div className="form-group">
-          <label className="form-label">Webhook URL Microsoft Teams</label>
+          <label className="form-label">Product ownerzy domeny (obserwatorzy alertów zespołu)</label>
+          <UserMultiSelect
+            users={users}
+            value={newTeam.productOwners}
+            onChange={(productOwners) => setNewTeam({ ...newTeam, productOwners })}
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Delegaci do dyżuru</label>
+          <UserMultiSelect
+            users={users}
+            value={newTeam.delegates}
+            onChange={(delegates) => setNewTeam({ ...newTeam, delegates })}
+          />
+          <div className="form-helper">
+            Osoby, które zespół deleguje do dyżurów - tylko je można wybrać w harmonogramie
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Teams Workflow URL - kanał zespołu</label>
           <input
             type="url"
             className="form-input"
-            placeholder="https://outlook.office.com/webhook/..."
+            placeholder="https://prod-xx.westeurope.logic.azure.com/workflows/..."
             value={newTeam.teamsWebhookUrl}
             onChange={(e) => setNewTeam({ ...newTeam, teamsWebhookUrl: e.target.value })}
           />
           <div className="form-helper">
-            Powiadomienia będą wysyłane na ten kanał Teams przy przypisaniu alertu do zespołu
+            Adres z Teams Workflows (szablon "Post to a channel when a webhook request is received").
+            Webhooki Office 365 zostały wycofane.
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Teams Workflow URL - wiadomość do dyżurnego (opcjonalnie)</label>
+          <input
+            type="url"
+            className="form-input"
+            placeholder="https://prod-xx.westeurope.logic.azure.com/workflows/..."
+            value={newTeam.dutyDmWorkflowUrl}
+            onChange={(e) => setNewTeam({ ...newTeam, dutyDmWorkflowUrl: e.target.value })}
+          />
+          <div className="form-helper">
+            Workflow dostaje pola recipientEmail i recipientName oraz kartę w attachments i wysyła ją w czacie do dyżurnego
           </div>
         </div>
 
@@ -524,123 +575,13 @@ function TeamsEscalation({ showFlag, selectedProject, onProjectChange }) {
         )}
       </div>
 
-      {/* Harmonogram Tygodniowy */}
-      <div className="mb-16">
-        <h4 className="section-subtitle">Harmonogram Dyżurów (Rotacja Tygodniowa)</h4>
-        <div className="form-helper mb-16">
-          Określ, który zespół jest na dyżurze w danym tygodniu
-        </div>
-
-        {schedule.length === 0 ? (
-          <div className="message-box message-info">
-            Brak harmonogramu. Dodaj pierwszy tydzień poniżej.
-          </div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Tydzień</th>
-                <th>Zespół</th>
-                <th>Osoba przypisana (Account ID)</th>
-                <th>Data Start</th>
-                <th>Data Koniec</th>
-                <th>Akcje</th>
-              </tr>
-            </thead>
-            <tbody>
-              {schedule.map((week, index) => (
-                <tr key={index}>
-                  <td>{week.weekNumber}</td>
-                  <td>
-                    <select
-                      className="form-select"
-                      value={week.teamId}
-                      onChange={(e) => updateScheduleWeek(index, 'teamId', e.target.value)}
-                    >
-                      <option value="">-- Wybierz zespół --</option>
-                      {teams.map(team => (
-                        <option key={team.id} value={team.id}>
-                          {team.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    {users.length > 0 ? (
-                      <select
-                        className="form-select"
-                        value={week.assignedPerson || ''}
-                        onChange={(e) => updateScheduleWeek(index, 'assignedPerson', e.target.value)}
-                      >
-                        <option value="">-- Wybierz użytkownika --</option>
-                        {users.map(user => (
-                          <option key={user.accountId} value={user.accountId}>
-                            {user.displayName} ({user.emailAddress || user.accountId})
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="Email lub Account ID (np. user@example.com lub 557058:abc123def456)"
-                        value={week.assignedPerson || ''}
-                        onChange={(e) => updateScheduleWeek(index, 'assignedPerson', e.target.value)}
-                      />
-                    )}
-                    <div className="form-helper">
-                      {users.length > 0 
-                        ? 'Wybierz użytkownika z listy lub wpisz email/Account ID'
-                        : 'Wpisz email użytkownika lub Account ID (np. 557058:abc123def456)'}
-                    </div>
-                  </td>
-                  <td>
-                    <input
-                      type="date"
-                      className="form-input"
-                      value={week.startDate}
-                      onChange={(e) => updateScheduleWeek(index, 'startDate', e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="date"
-                      className="form-input"
-                      value={week.endDate}
-                      onChange={(e) => updateScheduleWeek(index, 'endDate', e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    <button
-                      className="btn btn-default btn-small"
-                      onClick={() => removeWeekFromSchedule(index)}
-                    >
-                      Usuń
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-
-        <div className="flex flex-gap mt-16">
-          <button
-            className="btn btn-default"
-            onClick={addWeekToSchedule}
-            disabled={teams.length === 0}
-          >
-            Dodaj Tydzień
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={handleUpdateSchedule}
-            disabled={saving || schedule.length === 0}
-          >
-            {saving ? 'Zapisywanie...' : 'Zapisz Harmonogram'}
-          </button>
-        </div>
-      </div>
+      <DutySchedule
+        teams={teams}
+        schedule={schedule}
+        users={users}
+        saving={saving}
+        onSave={handleSaveSchedule}
+      />
     </div>
   );
 }

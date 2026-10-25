@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@forge/bridge';
+import FieldMetrics from './FieldMetrics';
 
 function Statistics({ showFlag, projectKey, issueTypeId }) {
   const [loading, setLoading] = useState(false);
@@ -288,7 +289,7 @@ function Statistics({ showFlag, projectKey, issueTypeId }) {
               {formatTime(statistics.sla?.avgTimeToFirstAction)}
             </div>
             <div style={{ fontSize: '12px', color: '#5E6C84', marginTop: '4px' }}>
-              {statistics.sla?.totalWithFirstAction || 0} zgłoszeń
+              {statistics.sla?.totalWithFirstAction || 0} alertów
             </div>
           </div>
           <div style={{ 
@@ -354,7 +355,7 @@ function Statistics({ showFlag, projectKey, issueTypeId }) {
       {/* Sekcja Trend zgłoszeń */}
       <div style={{ marginBottom: '32px' }}>
         <h3 style={{ marginBottom: '16px', color: '#172B4D', fontSize: '18px', fontWeight: '600' }}>
-          📈 Trend zgłoszeń
+          📈 Trend alertów
         </h3>
         <div style={{ 
           backgroundColor: 'white', 
@@ -483,7 +484,7 @@ function Statistics({ showFlag, projectKey, issueTypeId }) {
                           minWidth: `${Math.max(allPriorities.length * 12, 40)}px`,
                           height: '100%'
                         }}
-                        title={`${dateLabel}: ${total} zgłoszeń`}
+                        title={`${dateLabel}: ${total} alertów`}
                       >
                         {/* Kolumny dla każdego priorytetu */}
                         <div style={{ 
@@ -600,6 +601,13 @@ function Statistics({ showFlag, projectKey, issueTypeId }) {
           </div>
         </div>
       )}
+
+      <FieldMetrics
+        showFlag={showFlag}
+        projectKey={projectKey}
+        issueTypeId={issueTypeId}
+        timeRange={timeRange}
+      />
     </div>
   );
 }

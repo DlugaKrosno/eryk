@@ -61,7 +61,7 @@ function GeneralSettings({ showFlag, selectedProject, onProjectChange }) {
       }
     } catch (error) {
       setIssueTypes([]);
-      showFlag('error', 'Błąd', 'Nie udało się załadować typów zgłoszeń');
+      showFlag('error', 'Błąd', 'Nie udało się załadować typów alertów');
     }
   };
   
@@ -134,7 +134,7 @@ function GeneralSettings({ showFlag, selectedProject, onProjectChange }) {
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label className="form-label" htmlFor="incidentIssueTypeId">
-                Typ Zgłoszenia "Alert" *
+                Typ alertu *
               </label>
               <select
                 id="incidentIssueTypeId"
@@ -143,7 +143,7 @@ function GeneralSettings({ showFlag, selectedProject, onProjectChange }) {
                 onChange={(e) => setConfig({ ...config, incidentIssueTypeId: e.target.value })}
                 required
               >
-                <option value="">-- Wybierz typ zgłoszenia --</option>
+                <option value="">-- Wybierz typ alertu --</option>
                 {issueTypes.map(issueType => (
                   <option key={issueType.id} value={issueType.id}>
                     {issueType.name}
@@ -151,7 +151,7 @@ function GeneralSettings({ showFlag, selectedProject, onProjectChange }) {
                 ))}
               </select>
               <div className="form-helper">
-                Wybierz typ zgłoszenia, który będzie używany do tworzenia alertów
+                Wybierz typ, który będzie używany do tworzenia alertów
               </div>
             </div>
 
@@ -169,7 +169,7 @@ function GeneralSettings({ showFlag, selectedProject, onProjectChange }) {
                 required
               />
               <div className="form-helper">
-                URL Twojej instancji Jira Cloud (używany w linkach do zgłoszeń i powiadomieniach Teams). 
+                URL Twojej instancji Jira Cloud (używany w linkach do alertów i powiadomieniach Teams). 
                 Przykład: https://dreryk.atlassian.net
               </div>
             </div>
@@ -187,7 +187,7 @@ function GeneralSettings({ showFlag, selectedProject, onProjectChange }) {
                 placeholder="https://dreryk.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10400"
               />
               <div className="form-helper">
-                URL ikony projektu, która będzie wyświetlana w formularzu zgłoszenia (opcjonalne)
+                URL ikony projektu, która będzie wyświetlana w formularzu alertu (opcjonalne)
               </div>
               {config.projectIconUrl && (
                 <div style={{ marginTop: '8px' }}>

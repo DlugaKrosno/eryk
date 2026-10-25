@@ -5,27 +5,40 @@ modules:
       resource: smart-page
       resolver:
         function: resolver
-      title: DrEryk Alert
-      
+      title: drEryk Alert
+
+  # Konfiguracja aplikacji: Ustawienia Jiry -> Aplikacje (tylko administratorzy Jiry)
+  jira:adminPage:
+    - key: incident-reporter-admin
+      resource: smart-page
+      resolver:
+        function: resolver
+      title: drEryk Alert - konfiguracja
+
+  # Formularz alertu z wyborem projektu (Twoje aplikacje)
   jira:globalPage:
     - key: incident-reporter-global
       resource: smart-page
       resolver:
         function: resolver
-      title: DrEryk Alert
-      
+      title: drEryk Alert
+
   # Backend Functions
   function:
+    # Webtrigger SLA (odpowiedź HTTP)
+    - key: slaWebTrigger
+      handler: index.slaWebTrigger
+
+    # Trigger utworzenia alertu
+    - key: issueCreatedTrigger
+      handler: index.issueCreatedTrigger
+
     # Resolver dla Custom UI
     - key: resolver
       handler: index.handler
 
     # Create Incident
     - key: createIncident
-      handler: index.handler
-
-    # Process Incident (rule engine + escalation)
-    - key: processIncident
       handler: index.handler
 
     # Get Config
@@ -36,20 +49,12 @@ modules:
     - key: saveConfig
       handler: index.handler
 
-    # Test Rule
-    - key: testRule
-      handler: index.handler
-
     # Get My Incidents
     - key: getMyIncidents
       handler: index.handler
 
     # Get Audit Log
     - key: getAuditLog
-      handler: index.handler
-
-    # Trigger Handler
-    - key: processIncidentTrigger
       handler: index.handler
 
     # Get Projects
@@ -79,80 +84,64 @@ modules:
     # Save Project Config
     - key: saveProjectConfig
       handler: index.handler
-    
+
     # Get Context
     - key: getContext
       handler: index.handler
-    
+
     # Get Statistics
     - key: getStatistics
       handler: index.handler
-    
+
     # Scheduled SLA Check (call via webtrigger or external scheduler)
     - key: scheduledSLACheck
       handler: index.scheduledSLACheck
-    
-    # Manual SLA Check
-    - key: runSLACheck
-      handler: index.handler
-    
-    # Reprocess All Issues
-    - key: reprocessAllIssues
-      handler: index.handler
-    
+
     # Get Project Name
     - key: getProjectName
       handler: index.handler
-    
+
     # Get Configured Projects
     - key: getConfiguredProjects
       handler: index.handler
-    
+
     # Get Issues For Recalculation
     - key: getIssuesForRecalc
       handler: index.handler
-    
+
     # Reprocess Selected Issues
     - key: reprocessSelectedIssues
       handler: index.handler
-    
+
     # Test Teams Webhook
     - key: testTeamsWebhook
       handler: index.handler
-    
-    # Get Issues For SLA Check
-    - key: getIssuesForSLACheck
-      handler: index.handler
-    
-    # Send Batch SLA Reminder
-    - key: sendBatchSLAReminder
-      handler: index.handler
-  
+
   # Webtrigger - Manual or external SLA check
   webtrigger:
     - key: sla-check-trigger
-      function: scheduledSLACheck
+      function: slaWebTrigger
 
-  # Trigger - Auto-process on issue creation
+  # Cykliczne sprawdzanie SLA (co godzinę; przetwarza tylko projekty z aktywnymi regułami)
+  scheduledTrigger:
+    - key: sla-hourly-check
+      function: scheduledSLACheck
+      interval: hour
+
+  # Trigger - Auto-process on issue creation (osobna funkcja, nie resolver)
   trigger:
     - key: incident-created-trigger
-      function: processIncidentTrigger
+      function: issueCreatedTrigger
       events:
         - avi:jira:created:issue
 
 resources:
-  - key: user-page
-    path: static/user/build
-    
-  - key: admin-page
-    path: static/admin/build
-  
   - key: smart-page
     path: static/smart/build
 
 app:
   runtime:
-    name: nodejs20.x
+    name: nodejs22.x
   id: ari:cloud:ecosystem::app/14fb3225-4487-4c53-a8be-b887754173fa
 
 permissions:
@@ -164,4 +153,6 @@ permissions:
   external:
     fetch:
       backend:
-        - "*.webhook.office.com"
+        - address: "*.webhook.office.com"
+        - address: "*.logic.azure.com"
+        - address: "*.powerplatform.com"
